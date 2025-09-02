@@ -1,0 +1,160 @@
+syntax = "proto3";
+
+package user_services;
+
+option go_package = "user-services/proto";
+
+import "google/protobuf/any.proto";
+
+message StandardResponse {
+    int32 status_code = 1;
+    string message = 2;
+    google.protobuf.Any data = 3;
+}
+message JWTToken {
+    string access_token = 1;
+    string refresh_token = 2;
+    int64 expires_at = 3;
+}
+message UserPhoto {
+    string id = 1;
+    string user_id = 2;
+    string photo_type = 3;
+    string photo_url = 4;
+    bool is_verified = 5;
+    int64 created_at = 6;
+    int64 updated_at = 7;
+}
+
+message User {
+    string id = 1;
+    string email = 2;
+    string phone = 3;
+    string country_code = 4;
+    string first_name = 5;
+    string last_name = 6;
+    string role = 7;
+    bool is_active = 8;
+    int64 created_at = 9;
+    int64 updated_at = 10;
+    repeated UserPhoto photos = 11;
+}
+message RegisterRequest {
+    string email = 1;
+    string password = 2;
+    string phone = 3;
+    string country_code = 4;
+    string first_name = 5;
+    string last_name = 6;
+    string role = 7;
+}
+
+message LoginRequest {
+    string email = 1;
+    string password = 2;
+}
+
+message ValidateTokenRequest {
+    string token = 1;
+}
+
+message RefreshTokenRequest {
+    string refresh_token = 1;
+}
+
+message AuthResponse {
+    StandardResponse response = 1;
+    User user = 2;
+    JWTToken token = 3;
+    repeated UserPhoto photos = 4;
+}
+
+message SendVerificationRequest {
+    string user_id = 1;
+    string verification_type = 2; // email, sms, whatsapp
+    string token = 3;
+}
+
+message VerifyCodeRequest {
+    string user_id = 1;
+    string code = 2;
+    string verification_type = 3;
+    string token = 4;
+}
+
+message UploadPhotoRequest {
+    string user_id = 1;
+    string photo_type = 2; // user_photo, emirates_id, verify_photo
+    bytes photo_data = 3;
+    string file_extension = 4;
+    string token = 5;
+}
+
+message PhotoResponse {
+    StandardResponse response = 1;
+    UserPhoto photo = 2;
+}
+
+message ValidateTokenResponse {
+    StandardResponse response = 1;
+    User user = 2;
+    bool is_valid = 3;
+}
+
+message GetUserRequest {
+    string id = 1;
+    string token = 2;
+}
+
+message UpdateUserRequest {
+    string id = 1;
+    string token = 2;
+    string email = 3;
+    string phone = 4;
+    string country_code = 5;
+    string first_name = 6;
+    string last_name = 7;
+    string user_photo_url = 8;
+    string emirates_id_photo_url = 9;
+    string verify_photo_url = 10;
+}
+
+message DeleteUserRequest {
+    string id = 1;
+    string token = 2;
+}
+
+message ListUsersRequest {
+    string token = 1;
+    int32 page = 2;
+    int32 limit = 3;
+    string role = 4;
+}
+message UserResponse {
+    StandardResponse response = 1;
+    User user = 2;
+}
+
+message UsersListResponse {
+    StandardResponse response = 1;
+    repeated User users = 2;
+    int32 total = 3;
+    int32 page = 4;
+    int32 limit = 5;
+    string role = 6;
+}
+
+service UserService {
+  rpc RegisterNewUser(RegisterRequest) returns (AuthResponse);
+  rpc LoginUser(LoginRequest) returns (AuthResponse);
+  rpc ValidateUserToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc RefreshUserToken(RefreshTokenRequest) returns (AuthResponse);
+
+  rpc GetUserData(GetUserRequest) returns (UserResponse);
+  rpc UpdateUserData(UpdateUserRequest) returns (UserResponse);
+  rpc DeleteUserData(DeleteUserRequest) returns (StandardResponse);
+  rpc ListUsersData(ListUsersRequest) returns (UsersListResponse);
+  rpc UploadUserData(UploadPhotoRequest) returns (PhotoResponse);
+  rpc SendVerificationCode(SendVerificationRequest) returns (StandardResponse);
+  rpc VerifyCode(VerifyCodeRequest) returns (StandardResponse);
+}

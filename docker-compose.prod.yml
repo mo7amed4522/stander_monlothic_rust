@@ -1,0 +1,232 @@
+version: '3.8'
+
+services:
+  # Main application service for production
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: stander_monolithic_rust_prod
+    ports:
+      - "8080:8080"   # REST API
+      - "50051:50051" # gRPC
+    environment:
+      # Production environment settings
+      - ENVIRONMENT=production
+      - RUST_LOG=info
+      
+      # Database connections (use external managed databases in real production)
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:password@postgres:5432/stander_db}
+      - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017/stander_db}
+      
+      # Enable cloud services in production
+      - ENABLE_AWS_SERVICES=true
+      - ENABLE_HUAWEI_SERVICES=true
+      
+      # AWS configuration (set these in your production environment)
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      
+      # Huawei Cloud configuration (set these in your production environment)
+      - HUAWEI_ENDPOINT=${HUAWEI_ENDPOINT:-https://ecs.ap-southeast-1.myhuaweicloud.com}
+      - HUAWEI_ACCESS_KEY=${HUAWEI_ACCESS_KEY}
+      - HUAWEI_SECRET_KEY=${HUAWEI_SECRET_KEY}
+      - HUAWEI_PROJECT_ID=${HUAWEI_PROJECT_ID}
+      
+      # Logging
+      - LOG_LEVEL=info
+    depends_on:
+      - postgres
+      - mongo
+      - redis
+    networks:
+      - stander_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL database for production
+  postgres:
+    image: postgres:15-alpine
+    container_name: stander_postgres_prod
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-stander_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - stander_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    command: [
+      "postgres",
+      "-c", "shared_preload_libraries=pg_stat_statements",
+      "-c", "pg_stat_statements.track=all",
+      "-c", "max_connections=200",
+      "-c", "shared_buffers=256MB",
+      "-c", "effective_cache_size=1GB",
+      "-c", "work_mem=4MB",
+      "-c", "maintenance_work_mem=64MB",
+      "-c", "checkpoint_completion_target=0.9",
+      "-c", "wal_buffers=16MB",
+      "-c", "default_statistics_target=100"
+    ]
+
+  # MongoDB database for production
+  mongo:
+    image: mongo:7-jammy
+    container_name: stander_mongo_prod
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD:-password}
+      - MONGO_INITDB_DATABASE=${MONGO_DB:-stander_db}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_prod_data:/data/db
+      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js
+    networks:
+      - stander_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    command: [
+      "mongod",
+      "--auth",
+      "--bind_ip_all",
+      "--wiredTigerCacheSizeGB", "0.5"
+    ]
+
+  # Redis for caching in production
+  redis:
+    image: redis:7-alpine
+    container_name: stander_redis_prod
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_prod_data:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - stander_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    command: redis-server /usr/local/etc/redis/redis.conf
+
+  # Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    container_name: stander_nginx_prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx.conf:/etc/nginx/nginx.conf
+      - ./config/ssl:/etc/nginx/ssl
+    depends_on:
+      - app
+    networks:
+      - stander_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # Monitoring with Prometheus (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: stander_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - stander_network
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+
+  # Grafana for monitoring dashboards (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: stander_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - stander_network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+# Named volumes for production data persistence
+volumes:
+  postgres_prod_data:
+    driver: local
+  mongo_prod_data:
+    driver: local
+  redis_prod_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# Production network
+networks:
+  stander_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16

@@ -1,0 +1,154 @@
+version: '3.8'
+
+services:
+  # Main application service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: stander_monolithic_rust_app
+    ports:
+      - "8080:8080"   # REST API
+      - "50051:50051" # gRPC
+    environment:
+      # Development environment settings
+      - ENVIRONMENT=development
+      - RUST_LOG=debug
+      - RUST_BACKTRACE=1
+      
+      # Database connections
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/stander_db
+      - MONGODB_URL=mongodb://mongo:27017/stander_db
+      
+      # Disable cloud services in development
+      - ENABLE_AWS_SERVICES=false
+      - ENABLE_HUAWEI_SERVICES=false
+      
+      # Cloud service configs (empty/disabled for dev)
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=
+      - AWS_SECRET_ACCESS_KEY=
+      - HUAWEI_ENDPOINT=
+      - HUAWEI_ACCESS_KEY=
+      - HUAWEI_SECRET_KEY=
+      - HUAWEI_PROJECT_ID=
+      
+      # Logging
+      - LOG_LEVEL=debug
+    volumes:
+      - .:/app
+      - cargo_cache:/usr/local/cargo/registry
+      - target_cache:/app/target
+    command: cargo watch -x run
+    depends_on:
+      - postgres
+      - mongo
+      - redis
+    networks:
+      - stander_network
+    restart: unless-stopped
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    container_name: stander_postgres
+    environment:
+      - POSTGRES_DB=stander_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - stander_network
+    restart: unless-stopped
+
+  # MongoDB database
+  mongo:
+    image: mongo:7-jammy
+    container_name: stander_mongo
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+      - MONGO_INITDB_DATABASE=stander_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js
+    networks:
+      - stander_network
+    restart: unless-stopped
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: stander_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - stander_network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # Database administration tools
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: stander_pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@stander.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "8081:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - stander_network
+    restart: unless-stopped
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: stander_mongo_express
+    environment:
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=password
+      - ME_CONFIG_MONGODB_URL=mongodb://admin:password@mongo:27017/
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin
+    ports:
+      - "8082:8081"
+    depends_on:
+      - mongo
+    networks:
+      - stander_network
+    restart: unless-stopped
+
+# Named volumes for data persistence
+volumes:
+  postgres_data:
+    driver: local
+  mongo_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  cargo_cache:
+    driver: local
+  target_cache:
+    driver: local
+
+# Custom network
+networks:
+  stander_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

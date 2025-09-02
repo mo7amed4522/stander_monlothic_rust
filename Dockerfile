@@ -1,7 +1,5 @@
-# Multi-stage Dockerfile for Rust monolithic application
-
 # Build stage
-FROM rust:1.75-slim as builder
+FROM rust:1.86-slim as builder
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -9,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     libpq-dev \
     ca-certificates \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
@@ -69,7 +68,7 @@ ENV ENVIRONMENT=production
 CMD ["./stander_monlothic_rust"]
 
 # Development stage
-FROM rust:1.75-slim as development
+FROM rust:1.86-slim as development
 
 # Install system dependencies and development tools
 RUN apt-get update && apt-get install -y \
@@ -79,6 +78,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
     git \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 # Install cargo-watch for hot reloading

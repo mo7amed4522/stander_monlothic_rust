@@ -1,6 +1,10 @@
 {
   "cSpell.words": [
+    "ADMINPASSWORD",
+    "ADMINUSERNAME",
+    "appendonly",
     "appuser",
+    "BASICAUTH",
     "bson",
     "chrono",
     "clippy",
@@ -8,6 +12,7 @@
     "Cser",
     "dotenv",
     "dotenvy",
+    "dpage",
     "ehthumbs",
     "GORM",
     "healthcheck",
@@ -19,6 +24,7 @@
     "libpq",
     "monlothic",
     "ossp",
+    "pgadmin",
     "pgcrypto",
     "pids",
     "plpgsql",

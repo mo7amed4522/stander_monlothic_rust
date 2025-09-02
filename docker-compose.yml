@@ -16,15 +16,15 @@ services:
       - ENVIRONMENT=development
       - RUST_LOG=debug
       - RUST_BACKTRACE=1
-      
+
       # Database connections
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/stander_db
-      - MONGODB_URL=mongodb://mongo:27017/stander_db
-      
+      - DATABASE_URL=postgresql://postgres:2521@postgres:5432/database_name
+      - MONGODB_URL=mongodb://mongo:27017/app_database
+
       # Disable cloud services in development
       - ENABLE_AWS_SERVICES=false
       - ENABLE_HUAWEI_SERVICES=false
-      
+
       # Cloud service configs (empty/disabled for dev)
       - AWS_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=
@@ -33,7 +33,7 @@ services:
       - HUAWEI_ACCESS_KEY=
       - HUAWEI_SECRET_KEY=
       - HUAWEI_PROJECT_ID=
-      
+
       # Logging
       - LOG_LEVEL=debug
     volumes:
@@ -54,11 +54,11 @@ services:
     image: postgres:15-alpine
     container_name: stander_postgres
     environment:
-      - POSTGRES_DB=stander_db
+      - POSTGRES_DB=database_name
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=2521
     ports:
-      - "5432:5432"
+      - "4590:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
@@ -73,7 +73,7 @@ services:
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=password
-      - MONGO_INITDB_DATABASE=stander_db
+      - MONGO_INITDB_DATABASE=app_database
     ports:
       - "27017:27017"
     volumes:
@@ -151,4 +151,4 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.25.0.0/16

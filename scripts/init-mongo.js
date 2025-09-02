@@ -1,9 +1,45 @@
 // MongoDB initialization script for development environment
 
 // Switch to the application database
-db = db.getSiblingDB('stander_db');
+db = db.getSiblingDB('app_database');
 
 // Create collections with validation schemas
+db.createCollection('user_photos', {
+  validator: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['user_id', 'photo_type', 'photo_url'],
+      properties: {
+        _id: {
+          bsonType: 'objectId'
+        },
+        user_id: {
+          bsonType: 'string',
+          description: 'User ID is required'
+        },
+        photo_type: {
+          bsonType: 'string',
+          enum: ['profile', 'emirates_id', 'verification'],
+          description: 'Photo type is required'
+        },
+        photo_url: {
+          bsonType: 'string',
+          description: 'Photo URL is required'
+        },
+        is_verified: {
+          bsonType: 'bool'
+        },
+        created_at: {
+          bsonType: 'date'
+        },
+        updated_at: {
+          bsonType: 'date'
+        }
+      }
+    }
+  }
+});
+
 db.createCollection('users', {
   validator: {
     $jsonSchema: {
@@ -100,61 +136,7 @@ db.createCollection('users', {
   }
 });
 
-// Create examples collection
-db.createCollection('examples', {
-  validator: {
-    $jsonSchema: {
-      bsonType: 'object',
-      required: ['title', 'user_id'],
-      properties: {
-        _id: {
-          bsonType: 'objectId'
-        },
-        title: {
-          bsonType: 'string',
-          minLength: 1,
-          maxLength: 255,
-          description: 'Title is required and must be between 1-255 characters'
-        },
-        description: {
-          bsonType: 'string',
-          maxLength: 1000
-        },
-        content: {
-          bsonType: 'object',
-          description: 'Content can be any valid JSON object'
-        },
-        user_id: {
-          bsonType: 'objectId',
-          description: 'User ID is required'
-        },
-        tags: {
-          bsonType: 'array',
-          items: {
-            bsonType: 'string'
-          }
-        },
-        metadata: {
-          bsonType: 'object',
-          properties: {
-            category: { bsonType: 'string' },
-            priority: { bsonType: 'string', enum: ['low', 'medium', 'high'] },
-            status: { bsonType: 'string', enum: ['draft', 'published', 'archived'] }
-          }
-        },
-        is_active: {
-          bsonType: 'bool'
-        },
-        created_at: {
-          bsonType: 'date'
-        },
-        updated_at: {
-          bsonType: 'date'
-        }
-      }
-    }
-  }
-});
+
 
 // Create sessions collection for user sessions
 db.createCollection('sessions', {
@@ -235,12 +217,10 @@ db.users.createIndex({ "email": 1 }, { unique: true });
 db.users.createIndex({ "created_at": -1 });
 db.users.createIndex({ "is_active": 1 });
 
-db.examples.createIndex({ "user_id": 1 });
-db.examples.createIndex({ "title": "text", "description": "text" });
-db.examples.createIndex({ "created_at": -1 });
-db.examples.createIndex({ "tags": 1 });
-db.examples.createIndex({ "metadata.category": 1 });
-db.examples.createIndex({ "metadata.status": 1 });
+// Create indexes for user_photos collection
+db.user_photos.createIndex({ "user_id": 1 });
+db.user_photos.createIndex({ "photo_type": 1 });
+db.user_photos.createIndex({ "created_at": -1 });
 
 db.sessions.createIndex({ "user_id": 1 });
 db.sessions.createIndex({ "session_token": 1 }, { unique: true });
@@ -253,17 +233,17 @@ db.audit_logs.createIndex({ "user_id": 1 });
 // Insert sample data for development
 const sampleUsers = [
   {
-    username: 'admin',
-    email: 'admin@stander.com',
+    email: 'admin@app.com',
     password_hash: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.s5uO.G',
+    phone: '+971501234567',
+    country_code: '+971',
     first_name: 'Admin',
     last_name: 'User',
+    role: 'admin',
     is_active: true,
-    is_verified: true,
-    profile: {
-      bio: 'System Administrator',
-      location: 'Server Room'
-    },
+    email_verified: true,
+    phone_verified: true,
+    photos: [],
     preferences: {
       theme: 'dark',
       language: 'en',
@@ -273,17 +253,17 @@ const sampleUsers = [
     updated_at: new Date()
   },
   {
-    username: 'testuser',
-    email: 'test@stander.com',
+    email: 'test@app.com',
     password_hash: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.s5uO.G',
+    phone: '+971507654321',
+    country_code: '+971',
     first_name: 'Test',
     last_name: 'User',
+    role: 'user',
     is_active: true,
-    is_verified: true,
-    profile: {
-      bio: 'Test user for development',
-      location: 'Development Environment'
-    },
+    email_verified: true,
+    phone_verified: false,
+    photos: [],
     preferences: {
       theme: 'light',
       language: 'en',
@@ -299,90 +279,26 @@ sampleUsers.forEach(user => {
   const existingUser = db.users.findOne({ email: user.email });
   if (!existingUser) {
     const result = db.users.insertOne(user);
-    print(`Inserted user: ${user.username} with ID: ${result.insertedId}`);
+    print(`Inserted user: ${user.email} with ID: ${result.insertedId}`);
   } else {
-    print(`User ${user.username} already exists`);
+    print(`User ${user.email} already exists`);
   }
 });
 
-// Get admin user ID for sample examples
-const adminUser = db.users.findOne({ username: 'admin' });
-const testUser = db.users.findOne({ username: 'testuser' });
-
-if (adminUser && testUser) {
-  const sampleExamples = [
-    {
-      title: 'MongoDB Sample Document',
-      description: 'This is a sample document stored in MongoDB',
-      content: {
-        type: 'document',
-        format: 'json',
-        data: {
-          message: 'Hello from MongoDB!',
-          features: ['NoSQL', 'Document Store', 'Flexible Schema']
-        }
-      },
-      user_id: adminUser._id,
-      tags: ['mongodb', 'nosql', 'sample'],
-      metadata: {
-        category: 'database',
-        priority: 'medium',
-        status: 'published'
-      },
-      is_active: true,
-      created_at: new Date(),
-      updated_at: new Date()
-    },
-    {
-      title: 'Development Example',
-      description: 'Example document for development and testing',
-      content: {
-        type: 'test',
-        environment: 'development',
-        config: {
-          debug: true,
-          logging: 'verbose'
-        }
-      },
-      user_id: testUser._id,
-      tags: ['development', 'testing', 'config'],
-      metadata: {
-        category: 'development',
-        priority: 'low',
-        status: 'draft'
-      },
-      is_active: true,
-      created_at: new Date(),
-      updated_at: new Date()
-    }
-  ];
-
-  // Insert examples if they don't exist
-  sampleExamples.forEach(example => {
-    const existingExample = db.examples.findOne({ title: example.title });
-    if (!existingExample) {
-      const result = db.examples.insertOne(example);
-      print(`Inserted example: ${example.title} with ID: ${result.insertedId}`);
-    } else {
-      print(`Example ${example.title} already exists`);
-    }
-  });
-}
-
 // Create a user for the application to use
 db.createUser({
-  user: 'stander_app',
-  pwd: 'stander_password',
+  user: 'app_user',
+  pwd: 'app_password',
   roles: [
     {
       role: 'readWrite',
-      db: 'stander_db'
+      db: 'app_database'
     }
   ]
 });
 
 print('MongoDB initialization completed successfully!');
-print('Collections created: users, examples, sessions, audit_logs');
+print('Collections created: user_photos, users, sessions, audit_logs');
 print('Indexes created for optimal performance');
 print('Sample data inserted for development');
-print('Application user created: stander_app');
+print('Application user created: app_user');
